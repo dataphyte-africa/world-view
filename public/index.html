@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorldView</title>
+<link href="/cesium/Widgets/widgets.css" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body,#cesiumContainer{width:100%;height:100%;overflow:hidden;background:#000;font-family:Inter,'Segoe UI',system-ui,-apple-system,sans-serif;color:#e8eaed}
+
+/* ── Google Earth style base ── */
+#ui-overlay{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;font-size:13px}
+#ui-overlay>*{pointer-events:auto}
+
+/* ── Top bar ── */
+#top-bar{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+#top-bar .left, #top-bar .right{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+/* ── Buttons ── */
+.btn{background:rgba(28,32,40,.85);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:#e8eaed;padding:7px 13px;font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:5px;letter-spacing:.2px;user-select:none;white-space:nowrap;height:34px}
+.btn:hover{background:rgba(60,68,88,.8);border-color:rgba(255,255,255,.15)}
+.btn:active{transform:scale(.97)}
+.btn.active{background:rgba(138,180,248,.18);border-color:#8ab4f8;color:#8ab4f8}
+.btn .icon{font-size:14px;line-height:1}
+
+/* ── Stats pill ── */
+#stats-pill{background:rgba(28,32,40,.85);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:5px 14px;display:flex;align-items:center;gap:12px;height:34px;font-size:12px}
+#stats-pill .stat{display:flex;align-items:center;gap:5px;color:#9aa0a6}
+#stats-pill .stat .num{font-weight:600;color:#e8eaed;font-variant-numeric:tabular-nums;min-width:18px;text-align:right}
+#stats-pill .divider{width:1px;height:16px;background:rgba(255,255,255,.08)}
+#stats-pill .status-dot{width:6px;height:6px;border-radius:50%}
+#stats-pill .status-dot.online{background:#34a853;box-shadow:0 0 6px rgba(52,168,83,.6)}
+#stats-pill .status-dot.offline{background:#ea4335;box-shadow:0 0 6px rgba(234,67,53,.6)}
+#stats-pill .status-dot.stale{background:#fbbc04;box-shadow:0 0 6px rgba(251,188,4,.6)}
+#stats-pill #stat-text{color:#9aa0a6;font-size:11px}
+
+/* ── Legend ── */
+#legend{position:absolute;bottom:68px;right:12px;background:rgba(28,32,40,.88);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 13px;min-width:120px;opacity:0;visibility:hidden;transition:all .25s}
+#legend.open{opacity:1;visibility:visible}
+#legend h4{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#8ab4f8;opacity:.7;margin-bottom:4px}
+#legend .section{margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid rgba(255,255,255,.06)}
+#legend .section:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
+.legend-item{display:flex;align-items:center;margin:2px 0;font-size:11px;color:#c4c7cc;gap:7px}
+.legend-item .swatch{width:9px;height:9px;border-radius:2px;flex-shrink:0;border:1px solid rgba(255,255,255,.1)}
+
+/* ── Info Panel ── */
+#info-panel{position:absolute;bottom:68px;left:50%;transform:translateX(-50%) translateY(16px);background:rgba(28,32,40,.92);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:16px 22px;min-width:300px;max-width:440px;opacity:0;visibility:hidden;transition:all .35s cubic-bezier(.4,0,.2,1);box-shadow:0 12px 48px rgba(0,0,0,.6)}
+#info-panel.open{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+#info-panel .close{position:absolute;top:8px;right:12px;background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-size:20px;line-height:1;transition:color .2s;padding:4px}
+#info-panel .close:hover{color:#fff}
+#info-panel .title{font-size:15px;font-weight:600;margin-bottom:10px;padding-right:24px;display:flex;align-items:center;gap:8px}
+#info-panel .title .tag{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.06);color:#9aa0a6}
+#info-panel .title .tag.air{color:#8ab4f8;background:rgba(138,180,248,.12)}
+#info-panel .grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px}
+#info-panel .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04)}
+#info-panel .row:last-child{border-bottom:none}
+#info-panel .row .l{color:#9aa0a6}
+#info-panel .row .v{font-weight:500;text-align:right}
+#info-panel .row.full{grid-column:1/-1}
+
+/* ── Bottom bar ── */
+#bottom-bar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(28,32,40,.88);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:8px 16px;display:flex;align-items:center;gap:14px;height:40px}
+#bottom-bar .sep{width:1px;height:14px;background:rgba(255,255,255,.07)}
+#bottom-bar .item{color:#9aa0a6;font-size:11px;display:flex;align-items:center;gap:5px}
+#bottom-bar .item .val{color:#c4c7cc}
+
+/* ── Toast ── */
+#toast{position:fixed;top:54px;left:50%;transform:translateX(-50%);background:rgba(28,32,40,.9);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:6px 16px;font-size:11px;color:#9aa0a6;opacity:0;visibility:hidden;transition:all .3s;z-index:20;pointer-events:none}
+#toast.show{opacity:1;visibility:visible}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pulse{animation:pulse 1.5s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+
+<div id="ui-overlay">
+  <div id="top-bar">
+    <div class="left">
+      <button class="btn active" id="btn-air" title="Aircraft layer"><span class="icon">&#9992;</span> Air</button>
+    </div>
+    <div class="right">
+      <div id="stats-pill">
+        <div class="stat"><span class="num" id="s-air">0</span><span>&#9992;</span></div>
+      <div class="stat"><span class="num" id="s-boat">0</span><span>&#128674;</span></div>
+        <div class="divider"></div>
+        <span class="status-dot offline pulse" id="s-dot"></span>
+        <span id="stat-text">Connecting</span>
+      </div>
+      <button class="btn" id="btn-legend" title="Legend"><span class="icon">&#8801;</span></button>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div class="section">
+      <h4>&#9992; Aircraft</h4>
+      <div class="legend-item"><span class="swatch" style="background:#34a853"></span>0 – 10k ft</div>
+      <div class="legend-item"><span class="swatch" style="background:#fbbc04"></span>10 – 30k ft</div>
+      <div class="legend-item"><span class="swatch" style="background:#ea4335"></span>30k+ ft</div>
+      <div class="legend-item"><span class="swatch" style="background:rgba(255,255,255,.15)"></span>No alt</div>
+      <div class="legend-item"><span class="swatch" style="background:#4fc3f7"></span>Vessels</div>
+    </div>
+  </div>
+
+  <div id="info-panel">
+    <button class="close" id="info-close">&times;</button>
+    <div class="title" id="info-title">-- <span class="tag" id="info-tag"></span></div>
+    <div class="grid" id="info-grid"></div>
+  </div>
+
+  <div id="bottom-bar">
+    <div class="item" id="b-coords"><span class="val">--</span></div>
+    <div class="sep"></div>
+    <div class="item">Updated <span class="val" id="b-time">--</span></div>
+    <div class="sep"></div>
+    <div class="item">All <span class="val" id="b-total">0</span></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>window.CESIUM_BASE_URL = '/cesium';</script>
+<script src="/cesium/Cesium.js"></script>
+<script>
+// ─── Config ───
+const C = {
+  token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJjYzY0MDllYy1hYTkyLTRlZGQtYjZhMS0wMTYwZTQ3MTlmOTIiLCJpZCI6NDMzMTM3LCJpc3MiOiJodHRwczovL2lvbi5jZXNpdW0uY29tIiwiYXVkIjoidW5kZWZpbmVkX2RlZmF1bHQiLCJpYXQiOjE3NzkxMTg4NzR9.eZThh6J2KM190XOewKTnbRwvFWfP2KD-wCe3hjeTKxQ',
+  googleAsset: 2275207,
+  acInterval: 15000,
+  acUrl: '/api/opensky/states/all',
+  marineSocketPath: '/marine',
+  maxAc: 1000,
+  maxMarine: 1200,
+};
+
+// ─── Colors ───
+const CLR = {
+  acLow: Cesium.Color.fromCssColorString('#34a853'),
+  acMid: Cesium.Color.fromCssColorString('#fbbc04'),
+  acHigh: Cesium.Color.fromCssColorString('#ea4335'),
+  acNone: Cesium.Color.fromCssColorString('rgba(255,255,255,0.3)'),
+  marine: Cesium.Color.fromCssColorString('#4fc3f7'),
+  selected: Cesium.Color.fromCssColorString('#8ab4f8'),
+};
+
+const M_TO_FT = 3.28084;
+const scratchCartesian = new Cesium.Cartesian3();
+
+// ─── State ───
+const state = {
+  viewer: null,
+  acSource: null,
+  acEnts: {},
+  acInterp: {},
+  marineSource: null,
+  marineEnts: {},
+  marineInterp: {},
+  selected: null,
+  followId: null,
+  rotate: false,
+  showAc: true,
+  showMarine: true,
+
+  acBusy: false,
+  acTimer: null,
+  toastTimer: null,
+  marineSocket: null,
+};
+
+// ─── Components ───
+const UI = {
+  toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.classList.add('show');
+    clearTimeout(state.toastTimer);
+    state.toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+  },
+
+  setStatus(status) {
+    const dot = document.getElementById('s-dot');
+    const txt = document.getElementById('stat-text');
+    dot.className = 'status-dot ' + status.cls + (status.cls !== 'online' ? ' pulse' : '');
+    txt.textContent = status.label;
+  },
+
+  updateStats() {
+    const acCount = Object.keys(state.acEnts).length;
+    const marineCount = Object.keys(state.marineEnts).length;
+    document.getElementById('s-air').textContent = acCount;
+    document.getElementById('s-boat').textContent = marineCount;
+    document.getElementById('b-total').textContent = acCount + marineCount;
+  },
+
+  updateTime(time) {
+    if (time) document.getElementById('b-time').textContent = new Date(time * 1000).toLocaleTimeString();
+  },
+
+  showInfo(data) {
+    const panel = document.getElementById('info-panel');
+    document.getElementById('info-title').innerHTML = data.title + ' <span class="tag ' + data.type + '">' + data.type + '</span>';
+    const grid = document.getElementById('info-grid');
+    grid.innerHTML = data.rows.map(r => '<div class="row' + (r.full ? ' full' : '') + '"><span class="l">' + r.l + '</span><span class="v">' + (r.v ?? '--') + '</span></div>').join('');
+    panel.classList.add('open');
+  },
+
+  hideInfo() {
+    document.getElementById('info-panel').classList.remove('open');
+  },
+};
+
+// ─── Icon factories (cached) ───
+const iconCache = new Map();
+function cachedIcon(makeFn, key) {
+  if (!iconCache.has(key)) iconCache.set(key, makeFn());
+  return iconCache.get(key);
+}
+
+function makeAcIcon(color, size) {
+  size = size || 28;
+  const cacheKey = size + ':' + color.toCssColorString();
+  return cachedIcon(function() {
+    const c = document.createElement('canvas'); c.width = c.height = size * 2;
+    const x = c.getContext('2d'); const cx = size, cy = size, r = size * 0.8;
+    const col = Cesium.Color.clone(color);
+    const css = col.toCssColorString();
+    const a = 'rgba(' + Math.round(col.red*255) + ',' + Math.round(col.green*255) + ',' + Math.round(col.blue*255) + ',0.35)';
+    x.shadowColor = 'rgba(0,0,0,0.5)'; x.shadowBlur = 4;
+    x.beginPath(); x.arc(cx, cy, r, 0, Math.PI*2); x.fillStyle = a; x.fill();
+    x.beginPath(); x.arc(cx, cy, r*0.65, 0, Math.PI*2); x.fillStyle = css; x.fill(); x.strokeStyle = 'rgba(255,255,255,0.4)'; x.lineWidth = 1.5; x.stroke();
+    x.shadowBlur = 0;
+    x.beginPath(); x.moveTo(cx, cy-r*0.85); x.lineTo(cx-r*0.5, cy+r*0.3); x.lineTo(cx+r*0.5, cy+r*0.3); x.closePath(); x.fillStyle = css; x.fill(); x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 1; x.stroke();
+    return c;
+  }, cacheKey);
+}
+
+// ─── Helpers ───
+function acColor(altM) {
+  if (altM == null) return CLR.acNone;
+  const ft = altM * M_TO_FT;
+  if (ft < 10000) return CLR.acLow;
+  if (ft < 30000) return CLR.acMid;
+  return CLR.acHigh;
+}
+
+// ─── Entity management ───
+function upsertAc(s) {
+  const [id, cs, orig,,, lon, lat, baroAlt, onG, vel, hdg, vrate,, geoAlt] = s;
+  if (lon == null || lat == null) return;
+  const altM = baroAlt != null ? baroAlt : geoAlt;
+  const altFt = altM != null ? Math.round(altM * M_TO_FT) : null;
+  const color = acColor(altM);
+  const label = (cs || '').trim() || id.slice(-6).toUpperCase();
+  const pos = Cesium.Cartesian3.fromDegrees(lon, lat, altM != null ? altM : 10000);
+  let e = state.acEnts[id];
+  if (!e) {
+    if (Object.keys(state.acEnts).length >= C.maxAc) return;
+    e = new Cesium.Entity({
+      id, position: pos,
+      billboard: { image: makeAcIcon(color), scale: 1, verticalOrigin: Cesium.VerticalOrigin.CENTER, horizontalOrigin: Cesium.HorizontalOrigin.CENTER, scaleByDistance: new Cesium.NearFarScalar(1.5e5, 1.5, 8e6, 0.3), disableDepthTestDistance: 1000 },
+      label: { text: label, font: '11px Inter,sans-serif', fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK, outlineWidth: 2, style: Cesium.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Cesium.VerticalOrigin.BOTTOM, pixelOffset: new Cesium.Cartesian2(0, -4), showBackground: true, backgroundColor: new Cesium.Color(0,0,0,.4), backgroundPadding: new Cesium.Cartesian2(4,2), scaleByDistance: new Cesium.NearFarScalar(1.5e5,1,6e6,0), translucencyByDistance: new Cesium.NearFarScalar(2e5,1,5e6,0) },
+      properties: { icao24: id, callsign: label, origin: orig || 'Unknown', altitude: altFt, speed: vel != null ? Math.round(vel*1.94384) : null, heading: hdg != null ? Math.round(hdg) : null, vrate: vrate != null ? Math.round(vrate*196.85) : null, latitude: lat, longitude: lon, onGround: onG },
+    });
+    state.acSource.entities.add(e);
+    state.acEnts[id] = e;
+    state.acInterp[id] = { prev: pos, target: pos, at: performance.now() };
+  } else {
+    const cur = e.position ? (e.position.getValue(Cesium.JulianDate.now()) || pos) : pos;
+    state.acInterp[id] = { prev: cur, target: pos, at: performance.now() };
+    if (e.billboard) e.billboard.image = makeAcIcon(color);
+    if (e.properties) {
+      const p = e.properties;
+      p.altitude = altFt;
+      p.speed = vel != null ? Math.round(vel*1.94384) : null;
+      p.heading = hdg != null ? Math.round(hdg) : null;
+      p.vrate = vrate != null ? Math.round(vrate*196.85) : null;
+      p.latitude = lat;
+      p.longitude = lon;
+      p.onGround = onG;
+    }
+  }
+}
+
+function cleanAc(active) {
+  const s = new Set(active);
+  for (const id of Object.keys(state.acEnts)) {
+    if (!s.has(id)) { state.acSource.entities.remove(state.acEnts[id]); delete state.acEnts[id]; delete state.acInterp[id]; }
+  }
+}
+function resetColors() {
+  for (const id of Object.keys(state.acEnts)) {
+    const e = state.acEnts[id]; if (!e || !e.properties) continue;
+    const alt = e.properties.altitude; const altM = alt != null ? alt / M_TO_FT : null;
+    const col = acColor(altM);
+    if (e.billboard) e.billboard.image = makeAcIcon(col);
+    if (e.label) e.label.fillColor = Cesium.Color.WHITE;
+  }
+}
+
+function resetMarineColors() {
+  for (const id of Object.keys(state.marineEnts)) {
+    const e = state.marineEnts[id]; if (!e || !e.properties) continue;
+    if (e.billboard) e.billboard.image = makeMarineIcon(CLR.marine);
+    if (e.label) e.label.fillColor = Cesium.Color.WHITE;
+  }
+}
+
+function makeMarineIcon(color, size) {
+  size = size || 24;
+  const cacheKey = 'marine:' + size + ':' + color.toCssColorString();
+  return cachedIcon(function() {
+    const c = document.createElement('canvas'); c.width = c.height = size * 2;
+    const x = c.getContext('2d'); const cx = size, cy = size;
+    const css = color.toCssColorString();
+    x.shadowColor = 'rgba(0,0,0,0.35)'; x.shadowBlur = 4;
+    x.beginPath(); x.arc(cx, cy, size * 0.75, 0, Math.PI * 2); x.fillStyle = css; x.fill();
+    x.strokeStyle = 'rgba(255,255,255,0.9)'; x.lineWidth = 2; x.stroke();
+    x.shadowBlur = 0;
+    x.beginPath(); x.moveTo(cx, cy - size * 0.45); x.lineTo(cx - size * 0.35, cy + size * 0.35); x.lineTo(cx + size * 0.35, cy + size * 0.35); x.closePath();
+    x.fillStyle = 'rgba(255,255,255,0.85)'; x.fill();
+    return c;
+  }, cacheKey);
+}
+
+function normalizeMarineMessage(msg) {
+  return {
+    id: msg.mmsi || msg.MMSI || msg.imo || msg.id,
+    lat: msg.lat || msg.latitude || msg.Lat || msg.Latitude,
+    lon: msg.lon || msg.longitude || msg.Lon || msg.Longitude,
+    speed: msg.sog || msg.SOG || msg.speed || msg.Speed,
+    heading: msg.cog || msg.COG || msg.heading || msg.Heading,
+    name: msg.name || msg.Name || msg.shipname || msg.vesselName || 'Vessel',
+    vesselType: msg.type || msg.shipType || msg.vesselType || 'Vessel',
+  };
+}
+
+function upsertMarine(msg) {
+  const s = normalizeMarineMessage(msg);
+  const id = s.id;
+  if (!id || s.lat == null || s.lon == null) return;
+  const label = (s.name || id.toString()).toString().trim();
+  const pos = Cesium.Cartesian3.fromDegrees(s.lon, s.lat, 0);
+  const color = CLR.marine;
+  let e = state.marineEnts[id];
+  if (!e) {
+    if (Object.keys(state.marineEnts).length >= C.maxMarine) return;
+    e = new Cesium.Entity({
+      id,
+      position: pos,
+      billboard: { image: makeMarineIcon(color), scale: 1, verticalOrigin: Cesium.VerticalOrigin.CENTER, horizontalOrigin: Cesium.HorizontalOrigin.CENTER, scaleByDistance: new Cesium.NearFarScalar(2e5, 1.2, 8e6, 0.3), disableDepthTestDistance: 1000 },
+      label: { text: label, font: '11px Inter,sans-serif', fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK, outlineWidth: 2, style: Cesium.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Cesium.VerticalOrigin.BOTTOM, pixelOffset: new Cesium.Cartesian2(0, -4), showBackground: true, backgroundColor: new Cesium.Color(0,0,0,.4), backgroundPadding: new Cesium.Cartesian2(4,2), scaleByDistance: new Cesium.NearFarScalar(2e5,1,6e6,0), translucencyByDistance: new Cesium.NearFarScalar(2e5,1,5e6,0) },
+      properties: { mmsi: id, name: s.name, vesselType: s.vesselType, speed: s.speed != null ? Math.round(s.speed) : null, heading: s.heading != null ? Math.round(s.heading) : null, latitude: s.lat, longitude: s.lon },
+    });
+    state.marineSource.entities.add(e);
+    state.marineEnts[id] = e;
+    state.marineInterp[id] = { prev: pos, target: pos, at: performance.now() };
+  } else {
+    const cur = e.position ? (e.position.getValue(Cesium.JulianDate.now()) || pos) : pos;
+    state.marineInterp[id] = { prev: cur, target: pos, at: performance.now() };
+    if (e.billboard) e.billboard.image = makeMarineIcon(color);
+    if (e.label) e.label.text = label;
+    if (e.properties) {
+      const p = e.properties;
+      p.name = s.name;
+      p.vesselType = s.vesselType;
+      p.speed = s.speed != null ? Math.round(s.speed) : null;
+      p.heading = s.heading != null ? Math.round(s.heading) : null;
+      p.latitude = s.lat;
+      p.longitude = s.lon;
+    }
+  }
+}
+
+function cleanMarine(active) {
+  const s = new Set(active);
+  for (const id of Object.keys(state.marineEnts)) {
+    if (!s.has(id)) { state.marineSource.entities.remove(state.marineEnts[id]); delete state.marineEnts[id]; delete state.marineInterp[id]; }
+  }
+}
+
+function showMarineInfo(e) {
+  resetColors();
+  resetMarineColors();
+  const p = e.properties;
+  if (e.billboard) e.billboard.image = makeMarineIcon(CLR.selected);
+  if (e.label) e.label.fillColor = CLR.selected;
+  state.selected = e;
+  UI.showInfo({
+    type: 'marine', title: p.name || '--',
+    rows: [
+      { l: 'MMSI', v: p.mmsi },
+      { l: 'Type', v: p.vesselType },
+      { l: 'Speed', v: p.speed != null ? p.speed + ' kn' : '--' },
+      { l: 'Heading', v: p.heading != null ? p.heading + '\u00b0' : '--' },
+      { l: 'Position', v: p.latitude != null ? (+p.latitude).toFixed(5) + ', ' + (+p.longitude).toFixed(5) : '--', full: true },
+    ],
+  });
+}
+
+function connectMarineSocket() {
+  const wsUrl = window.location.origin.replace(/^http/, 'ws') + C.marineSocketPath;
+  const socket = new WebSocket(wsUrl);
+  state.marineSocket = socket;
+  socket.addEventListener('open', () => UI.toast('Marine websocket connected'));
+  socket.addEventListener('message', (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      if (payload?.type === 'marine:connected') return;
+      const message = payload.data || payload;
+      upsertMarine(message);
+    } catch (err) {
+      console.warn('Marine WS parse error:', err.message);
+    }
+  });
+  socket.addEventListener('close', () => {
+    UI.toast('Marine websocket disconnected, reconnecting...');
+    setTimeout(connectMarineSocket, 3000);
+  });
+  socket.addEventListener('error', (err) => console.warn('Marine WS error:', err));
+}
+
+// ─── Fetch ───
+async function fetchAc() {
+  if (state.acBusy) return; state.acBusy = true;
+  try {
+    const r = await fetch(C.acUrl, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (d.states && Array.isArray(d.states)) {
+      const ids = [];
+      for (const s of d.states) { if (s[5] != null && s[6] != null) { upsertAc(s); ids.push(s[0]); } }
+      cleanAc(ids);
+      UI.setStatus({ cls: 'online', label: 'Live' });
+      UI.updateTime(d.time);
+    }
+  } catch (e) { 
+    console.warn('AC fetch:', e.message); 
+    UI.setStatus({ cls: 'stale', label: 'Degraded' });
+  }
+  finally { state.acBusy = false; }
+}
+
+// ─── Init Cesium ───
+async function init() {
+  if (C.token) Cesium.Ion.defaultAccessToken = C.token;
+
+  state.viewer = new Cesium.Viewer('cesiumContainer', {
+    // CRITICAL CLEANUP: Removed conflicting default imagery/terrain providers here
+    animation: false, timeline: false, baseLayerPicker: false,
+    geocoder: false, navigationHelpButton: false, sceneModePicker: false,
+    homeButton: false, fullscreenButton: false, infoBox: false,
+    selectionIndicator: false, skyAtmosphere: false,
+    orderIndependentTranslucency: false,
+    targetFrameRate: 60, useDefaultRenderLoop: true,
+  });
+
+  const v = state.viewer;
+  v.scene.globe.show = false; // CRITICAL FIX: Hides the base ellipsoidal globe to completely stop Z-Fighting with Google 3D Tiles!
+  v.scene.highDynamicRange = true;
+
+  v.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(0, 20, 25000000), orientation: { heading: 0, pitch: -Cesium.Math.PI_OVER_TWO * 0.85, roll: 0 } });
+
+  try {
+    const gt = await Cesium.Cesium3DTileset.fromIonAssetId(C.googleAsset);
+    v.scene.primitives.add(gt);
+  } catch (_) {}
+
+  state.acSource = new Cesium.CustomDataSource('aircraft');
+  v.dataSources.add(state.acSource);
+  state.marineSource = new Cesium.CustomDataSource('marine');
+  v.dataSources.add(state.marineSource);
+
+  v.selectedEntityChanged.addEventListener(function(e) {
+    if (e && e.properties) {
+      if (e.properties.icao24) { showAcInfo(e); return; }
+      if (e.properties.mmsi) { showMarineInfo(e); return; }
+    }
+    UI.hideInfo();
+    state.selected = null;
+  });
+
+  v.screenSpaceEventHandler.setInputAction(function(e) {
+    const p = v.scene.pick(e.position);
+    const id = p && Cesium.defined(p.id) ? p.id : null;
+    if (id && id.properties && (id.properties.icao24 || id.properties.mmsi)) {
+      v.selectedEntity = id;
+    } else {
+      v.selectedEntity = null;
+      UI.hideInfo();
+      if (state.selected) { resetColors(); resetMarineColors(); state.selected = null; }
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  // Toggle controls
+  document.getElementById('btn-air').addEventListener('click', function() {
+    state.showAc = !state.showAc; this.classList.toggle('active');
+    state.acSource.show = state.showAc;
+  });
+
+  document.getElementById('btn-legend').addEventListener('click', function() {
+    document.getElementById('legend').classList.toggle('open');
+  });
+
+  document.getElementById('info-close').addEventListener('click', function() {
+    UI.hideInfo(); 
+    if (state.followId) {
+      state.followId = null;
+      v.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    }
+    if (state.selected) { resetColors(); state.selected = null; }
+  });
+
+  // Hotkeys
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'r' || e.key === 'R') {
+      state.rotate = !state.rotate;
+    }
+    if (e.key === 'Escape') {
+      UI.hideInfo(); 
+      if (state.followId) {
+        state.followId = null;
+        v.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+      }
+      if (state.selected) { resetColors(); state.selected = null; }
+    }
+  });
+
+  // Render loop ticks
+  v.clock.onTick.addEventListener(function() {
+    const now = performance.now();
+    for (const id of Object.keys(state.acInterp)) {
+      const ip = state.acInterp[id]; const e = state.acEnts[id];
+      if (!ip || !e || !e.position) continue;
+      const t = Math.min((now - ip.at) / C.acInterval, 1);
+      if (t >= 1) e.position.setValue(ip.target);
+      else {
+        Cesium.Cartesian3.lerp(ip.prev, ip.target, t, scratchCartesian);
+        e.position.setValue(scratchCartesian);
+      }
+    }
+    for (const id of Object.keys(state.marineInterp)) {
+      const ip = state.marineInterp[id]; const e = state.marineEnts[id];
+      if (!ip || !e || !e.position) continue;
+      const t = Math.min((now - ip.at) / C.acInterval, 1);
+      if (t >= 1) e.position.setValue(ip.target);
+      else {
+        Cesium.Cartesian3.lerp(ip.prev, ip.target, t, scratchCartesian);
+        e.position.setValue(scratchCartesian);
+      }
+    }
+    if (state.rotate && !state.followId) v.camera.rotate(Cesium.Cartesian3.UNIT_Z, 0.0005);
+    if (state.followId) {
+      const e = state.acEnts[state.followId] || state.marineEnts[state.followId];
+      if (e && e.position) {
+        const pos = e.position.getValue(v.clock.currentTime);
+        if (pos) v.camera.lookAt(pos, new Cesium.Cartesian3(0, 0, 5000));
+      }
+    }
+    UI.updateStats();
+  });
+
+  await fetchAc();
+  connectMarineSocket();
+  state.acTimer = setInterval(fetchAc, C.acInterval);
+}
+
+function showAcInfo(e) {
+  resetColors();
+  const p = e.properties;
+  const col = CLR.selected;
+  if (e.billboard) e.billboard.image = makeAcIcon(col);
+  if (e.label) e.label.fillColor = col;
+  state.selected = e;
+  const status = p.altitude != null ? p.altitude.toLocaleString() + ' ft' : '--';
+  UI.showInfo({
+    type: 'air', title: p.callsign || '--',
+    rows: [
+      { l: 'ICAO', v: p.icao24 }, { l: 'Country', v: p.origin },
+      { l: 'Altitude', v: status }, { l: 'Speed', v: p.speed != null ? p.speed + ' kn' : '--' },
+      { l: 'Heading', v: p.heading != null ? p.heading + '\u00b0' : '--' }, { l: 'V. Rate', v: p.vrate != null ? p.vrate + ' ft/min' : '--' },
+      { l: 'Position', v: p.latitude != null ? (+p.latitude).toFixed(2) + ', ' + (+p.longitude).toFixed(2) : '--', full: true },
+    ],
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
