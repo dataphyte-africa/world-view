@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorldView</title>
+<link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+<link href="/assets/css/worldview.css" rel="stylesheet">
+</head>
+<body>
+<div id="map"></div>
+
+<div id="ui-overlay">
+  <div id="top-bar">
+    <div class="left">
+      <div id="search-container">
+        <input type="text" id="search-input" placeholder="Search places or lat,lng..." spellcheck="false">
+        <button class="btn" id="btn-search" title="Search"><span class="icon">&#128269;</span></button>
+      </div>
+    </div>
+    <div class="right">
+      <div id="stats-pill"></div>
+      <button class="btn" id="btn-pin" title="Pin mode — click on map to add a pin"><span class="icon">&#128204;</span> Pin</button>
+      <button class="btn" id="btn-heatmap" title="Toggle heatmap layer"><span class="icon">&#128293;</span> Heat</button>
+      <button class="btn" id="btn-legend" title="Legend &amp; pins"><span class="icon">&#8801;</span></button>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div class="section" id="pin-section">
+      <h4 style="display:flex;justify-content:space-between;align-items:center">
+        <span>&#128204; Pins <span id="pin-count" style="font-weight:400;color:#9aa0a6;font-size:9px"></span></span>
+        <button id="btn-clear-pins" style="background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;font-size:9px;padding:0">Clear</button>
+      </h4>
+      <div id="pin-list"></div>
+    </div>
+  </div>
+
+  <div id="co2-panel">
+    <div class="co2-header">
+      <span style="font-weight:600">CO&#8322; Dispersion</span>
+      <button id="co2-close" style="background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-size:18px;line-height:1;padding:0">&times;</button>
+    </div>
+    <div class="co2-body">
+      <div class="co2-field">
+        <span class="co2-label">Source</span>
+        <span id="co2-source-status" style="color:#ff6d01;font-size:11px">Click map to place</span>
+      </div>
+      <div class="co2-field">
+        <span class="co2-label">Wind Dir</span>
+        <div class="co2-slider-row">
+          <input type="range" id="co2-wind-dir" min="0" max="360" value="180" step="1">
+          <span id="co2-wind-dir-val" class="co2-val">180&deg;</span>
+        </div>
+      </div>
+      <div class="co2-field">
+        <span class="co2-label">Wind Speed (1.7 – 4.0 m/s)</span>
+        <div class="co2-slider-row">
+          <input type="range" id="co2-wind-speed" min="1.7" max="4.0" value="2.85" step="0.05">
+          <span id="co2-wind-speed-val" class="co2-val">2.85 m/s</span>
+        </div>
+      </div>
+      <div class="co2-field">
+        <span class="co2-label">Stability (Pasquill)</span>
+        <div class="co2-radio-row">
+          <label><input type="radio" name="co2-stability" value="C" checked> C (Slightly Unstable)</label>
+          <label><input type="radio" name="co2-stability" value="D"> D (Neutral)</label>
+        </div>
+      </div>
+      <div class="co2-field">
+        <div class="co2-live-row">
+          <button id="btn-co2-live" class="co2-live-btn" title="Fetch live wind data from OpenWeather">&#9992; Live</button>
+          <span id="co2-live-status" class="co2-live-status"></span>
+        </div>
+      </div>
+      <div class="co2-info" id="co2-info"></div>
+    </div>
+  </div>
+
+  <div id="info-panel">
+    <button class="close" id="info-close">&times;</button>
+    <div class="title" id="info-title">-- <span class="tag" id="info-tag"></span></div>
+    <div class="grid" id="info-grid"></div>
+  </div>
+
+  <div id="bottom-bar">
+    <div class="item" id="b-coords"><span class="val">--</span></div>
+    <div class="sep"></div>
+    <div class="item">Updated <span class="val" id="b-time">--</span></div>
+    <div class="sep"></div>
+    <div class="item">All <span class="val" id="b-total">0</span></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+window.WORLDVIEW_CONFIG = <%- JSON.stringify(config) %>;
+</script>
+<script src="/assets/js/worldview.js"></script>
+</body>
+</html>

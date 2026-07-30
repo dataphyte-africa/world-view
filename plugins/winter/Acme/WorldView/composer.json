@@ -1,0 +1,10 @@
+{
+    "name": "acme/worldview-plugin-winter",
+    "description": "WorldView plugin for Winter CMS - interactive world map",
+    "type": "winter-plugin",
+    "require": {
+        "php": ">=8.1",
+        "composer/installers": "~1.0",
+        "world-view/core": "*"
+    }
+}

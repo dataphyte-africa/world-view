@@ -1,16 +1,20 @@
 {
   "name": "world-view",
   "version": "1.0.0",
-  "description": "Live 3D globe with aircraft tracking via CesiumJS, OpenSky Network, ADS-B Exchange",
+  "description": "Interactive world map with pins, heatmaps, KML layers, and optional aircraft tracking via OpenSky Network",
   "main": "server.js",
+  "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
   "dependencies": {
-    "axios": "^1.6.0",
-    "cesium": "^1.141.0",
-    "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "ws": "^8.13.0"
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "ejs": "^3.1.0",
+    "express": "^4.19.0",
+    "express-rate-limit": "^7.2.0",
+    "fast-xml-parser": "^4.5.7",
+    "sql.js": "^1.14.1"
   }
 }

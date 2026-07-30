@@ -1,0 +1,22 @@
+{
+    "name": "acme/worldview-statamic",
+    "description": "WorldView addon for Statamic - interactive world map with pins, heatmaps, and optional aircraft tracking",
+    "type": "statamic-addon",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Acme\\WorldView\\": "src/"
+        }
+    },
+    "extra": {
+        "statamic": {
+            "name": "WorldView",
+            "description": "Interactive world map addon"
+        }
+    },
+    "require": {
+        "php": ">=8.1",
+        "statamic/cms": "^4.0|^5.0",
+        "world-view/core": "*"
+    }
+}
