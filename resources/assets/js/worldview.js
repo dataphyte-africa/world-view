@@ -10,24 +10,10 @@
     api: {
       health: '/' + prefix + '/health',
       pins: '/' + prefix + '/pins',
-      opensky: '/' + prefix + '/opensky',
     },
-    aircraftEnabled: !!cfg.aircraftEnabled,
-    acInterval: cfg.fetchInterval || 15000,
-    maxAc: cfg.maxAircraft || 1000,
-    retryBaseMs: 2000,
-    retryMaxMs: 30000,
     weatherEnabled: !!cfg.weatherEnabled,
+    weatherInterval: cfg.weatherInterval || 60000,
   };
-
-  var CLR = {
-    acLow: '#34a853',
-    acMid: '#fbbc04',
-    acHigh: '#ea4335',
-    acNone: 'rgba(255,255,255,0.3)',
-  };
-
-  var M_TO_FT = 3.28084;
 
   var state = {
     map: null,
@@ -39,25 +25,15 @@
     pinMode: false,
     showHeatmap: false,
     heatmapTimer: null,
-    acLayer: null,
-    acMarkers: {},
-    acSelected: null,
-    showAc: C.aircraftEnabled,
-    acBusy: false,
-    acTimer: null,
-    acFailCount: 0,
-    acRetryTimer: null,
     kmlLayer: null,
     co2: {
       enabled: false,
-      sourceLat: null,
-      sourceLng: null,
+      sources: [],
+      nextId: 1,
       windDir: 180,
       windSpeed: 2.85,
       stability: 'C',
       layer: null,
-      circles: null,
-      sourceMarker: null,
       liveWeather: false,
       liveTimer: null,
     },
@@ -67,16 +43,6 @@
   var apiUrl = function (path) { return C.api.pins + path; };
 
   // ─── Icons ───
-  function makeAcIcon(color, size) {
-    size = size || 28;
-    return L.divIcon({
-      className: 'ac-marker',
-      html: '<div class="ac-icon" style="background:' + color + '33;box-shadow:0 0 8px ' + color + '66"><div class="dot" style="border-color:' + color + ';background:' + color + '"></div><div class="arrow" style="border-bottom-color:' + color + '"></div></div>',
-      iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
-    });
-  }
-
   function makeKmlIcon(highlight) {
     return L.divIcon({
       className: 'kml-marker',
@@ -96,21 +62,8 @@
       state.toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2000);
     },
 
-    setStatus: function (status) {
-      var dot = document.getElementById('s-dot');
-      var txt = document.getElementById('stat-text');
-      if (dot) dot.className = 'status-dot ' + status.cls + (status.cls !== 'online' ? ' pulse' : '');
-      if (txt) txt.textContent = status.label;
-    },
-
     updateStats: function () {
-      var el = document.getElementById('s-air');
-      if (el) el.textContent = Object.keys(state.acMarkers).length;
       document.getElementById('b-total').textContent = state.pins.length;
-    },
-
-    updateTime: function (time) {
-      if (time) document.getElementById('b-time').textContent = new Date(time * 1000).toLocaleTimeString();
     },
 
     showInfo: function (data) {
@@ -129,20 +82,6 @@
   };
 
   // ─── Helpers ───
-  function acColor(altM) {
-    if (altM == null) return CLR.acNone;
-    var ft = altM * M_TO_FT;
-    if (ft < 10000) return CLR.acLow;
-    if (ft < 30000) return CLR.acMid;
-    return CLR.acHigh;
-  }
-
-  function acColorCss(altM) {
-    var col = acColor(altM);
-    if (col === CLR.acNone) return 'rgba(255,255,255,0.3)';
-    return col;
-  }
-
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (m) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m];
@@ -314,109 +253,6 @@
     });
   }
 
-  // ─── Aircraft ───
-  function upsertAc(s) {
-    var id = s[0], cs = s[1], lon = s[5], lat = s[6], baroAlt = s[7], vel = s[9], hdg = s[10], vrate = s[11], geoAlt = s[13];
-    if (lon == null || lat == null) return;
-    var altM = baroAlt != null ? baroAlt : geoAlt;
-    var altFt = altM != null ? Math.round(altM * M_TO_FT) : null;
-    var color = acColorCss(altM);
-    var label = (cs || '').trim() || id.slice(-6).toUpperCase();
-
-    var marker = state.acMarkers[id];
-    if (!marker) {
-      if (Object.keys(state.acMarkers).length >= C.maxAc) return;
-      var icon = makeAcIcon(color);
-      marker = L.marker([lat, lon], { icon: icon }).addTo(state.acLayer);
-      marker.acData = { altFt: altFt, vel: vel, hdg: hdg, vrate: vrate, lat: lat, lon: lon, color: color };
-      marker.bindPopup(label + '<br>' + (altFt != null ? altFt.toLocaleString() + ' ft' : '--') + ' | ' + (vel != null ? Math.round(vel * 1.94384) + ' kn' : '--'));
-      marker.on('click', function () { showAcInfo(marker, id); });
-      state.acMarkers[id] = marker;
-    } else {
-      marker.setLatLng([lat, lon]);
-      marker.acData = { altFt: altFt, vel: vel, hdg: hdg, vrate: vrate, lat: lat, lon: lon, color: color };
-      marker.setIcon(makeAcIcon(color));
-      marker.setPopupContent(label + '<br>' + (altFt != null ? altFt.toLocaleString() + ' ft' : '--') + ' | ' + (vel != null ? Math.round(vel * 1.94384) + ' kn' : '--'));
-    }
-  }
-
-  function cleanAc(active) {
-    var s = new Set(active);
-    for (var id in state.acMarkers) {
-      if (state.acMarkers.hasOwnProperty(id) && !s.has(id)) {
-        state.acLayer.removeLayer(state.acMarkers[id]);
-        delete state.acMarkers[id];
-      }
-    }
-  }
-
-  function showAcInfo(marker, id) {
-    if (state.acSelected && state.acSelected !== marker) resetColors();
-    var d = marker.acData || {};
-    state.acSelected = marker;
-    marker.setIcon(makeAcIcon('#8ab4f8'));
-    UI.showInfo({
-      type: 'air',
-      title: marker.getPopupContent().split('<br>')[0] || '--',
-      rows: [
-        { l: 'ICAO', v: id },
-        { l: 'Altitude', v: d.altFt != null ? d.altFt.toLocaleString() + ' ft' : '--' },
-        { l: 'Speed', v: d.vel != null ? Math.round(d.vel * 1.94384) + ' kn' : '--' },
-        { l: 'Heading', v: d.hdg != null ? Math.round(d.hdg) + '\u00b0' : '--' },
-        { l: 'V. Rate', v: d.vrate != null ? Math.round(d.vrate * 196.85) + ' ft/min' : '--' },
-        { l: 'Position', v: d.lat != null ? d.lat.toFixed(2) + ', ' + d.lon.toFixed(2) : '--', full: true },
-      ],
-    });
-  }
-
-  function resetColors() {
-    if (!state.acSelected) return;
-    var d = state.acSelected.acData;
-    if (d && d.color) state.acSelected.setIcon(makeAcIcon(d.color));
-    state.acSelected = null;
-  }
-
-  function fetchAc() {
-    if (state.acBusy) return;
-    state.acBusy = true;
-    fetch(C.api.opensky + '/states/all', { signal: AbortSignal.timeout(15000) })
-      .then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function (d) {
-        state.acFailCount = 0;
-        if (d.states && Array.isArray(d.states)) {
-          var ids = [];
-          for (var i = 0; i < d.states.length; i++) {
-            var s = d.states[i];
-            if (s[5] != null && s[6] != null) { upsertAc(s); ids.push(s[0]); }
-          }
-          cleanAc(ids);
-          UI.setStatus({ cls: 'online', label: 'Live' });
-          if (d.time) UI.updateTime(d.time);
-          UI.updateStats();
-        }
-      })
-      .catch(function (e) {
-        state.acFailCount++;
-        console.warn('AC fetch (' + state.acFailCount + 'x):', e.message);
-        if (state.acFailCount >= 3) {
-          UI.setStatus({ cls: 'offline', label: 'Offline' });
-        } else {
-          UI.setStatus({ cls: 'stale', label: 'Retrying...' });
-        }
-        scheduleAcRetry();
-      })
-      .finally(function () { state.acBusy = false; });
-  }
-
-  function scheduleAcRetry() {
-    clearTimeout(state.acRetryTimer);
-    var delay = Math.min(C.retryBaseMs * Math.pow(2, state.acFailCount), C.retryMaxMs);
-    state.acRetryTimer = setTimeout(fetchAc, delay);
-  }
-
   // ─── KML ───
   function loadKml() {
     var features = cfg.kmlFeatures || [];
@@ -453,9 +289,8 @@
     if (state.heatmapLayer) { state.map.removeLayer(state.heatmapLayer); state.heatmapLayer = null; }
     if (!state.showHeatmap) return;
 
-    var srcLat = state.co2.sourceLat;
-    var srcLng = state.co2.sourceLng;
-    if (srcLat == null) {
+    var sources = state.co2.sources;
+    if (!sources.length) {
       UI.toast('Click map to place CO\u2082 source');
       return;
     }
@@ -469,29 +304,29 @@
     var cosT = Math.cos(theta), sinT = Math.sin(theta);
 
     var degLat = 111320;
-    var degLng = 111320 * Math.cos(srcLat * Math.PI / 180);
-    var maxExtent = CO2_PARAMS.maxExtent;
-    var downwind = Math.min(maxExtent, maxExtent * (2.5 / Math.max(u, 0.5)));
-    var crosswind = Math.round(downwind * 0.45);
-    var upwind = Math.round(downwind * 0.1);
+    var pollutionRadius = pollutionRadiusMeters(u);
 
-    function meterToLatLng(mx, my) {
-      var east = mx * sinT + my * cosT;
-      var north = mx * cosT - my * sinT;
-      return { lat: srcLat + north / degLat, lng: srcLng + east / degLng };
-    }
-
-    var corners = [
-      meterToLatLng(-upwind, -crosswind),
-      meterToLatLng(downwind, -crosswind),
-      meterToLatLng(downwind, crosswind),
-      meterToLatLng(-upwind, crosswind),
-    ];
-    var lats = corners.map(function (c) { return c.lat; });
-    var lngs = corners.map(function (c) { return c.lng; });
+    // Per-source data (own meters-per-degree longitude) and union bounding box
+    var srcData = sources.map(function (s) {
+      return {
+        lat: s.lat,
+        lng: s.lng,
+        degLng: 111320 * Math.cos(s.lat * Math.PI / 180),
+      };
+    });
+    var minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+    srcData.forEach(function (s) {
+      if (s.lat < minLat) minLat = s.lat;
+      if (s.lat > maxLat) maxLat = s.lat;
+      if (s.lng < minLng) minLng = s.lng;
+      if (s.lng > maxLng) maxLng = s.lng;
+    });
+    var centroid = co2Centroid();
+    var padLat = pollutionRadius / degLat;
+    var padLng = pollutionRadius / (111320 * Math.cos(centroid.lat * Math.PI / 180));
     var bounds = L.latLngBounds(
-      L.latLng(Math.min.apply(null, lats), Math.min.apply(null, lngs)),
-      L.latLng(Math.max.apply(null, lats), Math.max.apply(null, lngs))
+      L.latLng(minLat - padLat, minLng - padLng),
+      L.latLng(maxLat + padLat, maxLng + padLng)
     );
 
     var cw = 400, ch = 300;
@@ -509,13 +344,18 @@
       for (var px = 0; px < cw; px++) {
         var lat = bN - (py / ch) * (bN - bS);
         var lng = bW + (px / cw) * (bE - bW);
-        var east = (lng - srcLng) * degLng;
-        var north = (lat - srcLat) * degLat;
-        var xD = east * sinT + north * cosT;
-        var yD = east * cosT - north * sinT;
-        var c = gaussianPlume(xD, yD, Q, u, he, stability);
-        conc[py * cw + px] = c;
-        if (c > maxC) maxC = c;
+        var total = 0;
+        for (var si = 0; si < srcData.length; si++) {
+          var s = srcData[si];
+          var east = (lng - s.lng) * s.degLng;
+          var north = (lat - s.lat) * degLat;
+          if (east * east + north * north > pollutionRadius * pollutionRadius) continue;
+          var xD = east * sinT + north * cosT;
+          var yD = east * cosT - north * sinT;
+          total += gaussianPlume(xD, yD, Q, u, he, stability);
+        }
+        conc[py * cw + px] = total;
+        if (total > maxC) maxC = total;
       }
     }
 
@@ -672,9 +512,16 @@
   // ─── CO2 Dispersion Model (Gaussian Plume, Pasquill-Gifford) ───
   // Parameters derived from flare volume: 35M MSCF/yr → Q = 60,600 g/s
   // Effective stack height he = 75m (buoyant plume rise, 50-100m range)
-  // Ambient wind speed range: 1.7 - 4.0 m/s (mean 2.85 m/s)
-  // Stability classes: C (slightly unstable), D (neutral)
-  // Peak ground-level impact radius: 1.2 - 2.5 km at mean wind
+  // CO2 Atmospheric Dispersion Report (guide):
+  //   Q = 60,600 g/s for 35 MMSCF/yr flared gas (54.6 kg CO2/MSCF).
+  //   Ambient wind range 1.7 - 4.0 m/s (mean 2.85 m/s).
+  //   Pasquill Stability Class C (slightly unstable) / D (neutral).
+  //   Effective stack height he scales 50-100 m (modelled 75 m).
+  //   Peak ground-level impact radius (downwind reach before ambient blend):
+  //     1.7 m/s  -> 1.5 - 3.5 km
+  //     4.0 m/s  -> 0.8 - 2.0 km
+  //     2.85 m/s -> 1.2 - 2.5 km
+  //   Summary: effective dispersion radius stabilizes between 1.2 km and 2.5 km.
 
   var CO2_PARAMS = {
     Q: 60600,
@@ -682,6 +529,7 @@
     maxExtent: 2500,
     windRange: { min: 1.7, max: 4.0 },
     peakRadius: { low: 1.2, high: 2.5 },
+    spread: 1.5,
   };
 
   function sigmaY(x, stability) {
@@ -700,10 +548,24 @@
 
   function gaussianPlume(x, y, Q, u, he, stability) {
     if (x <= 1) return 0;
-    var sy = sigmaY(x, stability);
+    // Widen lateral spread so the plume footprint is roughly as wide as the
+    // affected community (dispersion radius) rather than a narrow streak.
+    var sy = sigmaY(x, stability) * CO2_PARAMS.spread;
     var sz = sigmaZ(x, stability);
     if (sy <= 0.01 || sz <= 0.01) return 0;
     return (Q / (Math.PI * u * sy * sz)) * Math.exp(-(y * y) / (2 * sy * sy)) * Math.exp(-(he * he) / (2 * sz * sz));
+  }
+
+  // Approximate community impact radius (peak ground-level dispersion radius
+  // from the guide): 2.5 km at low wind, shrinking linearly to 1.2 km at high
+  // wind. Matches the summary finding (1.2 - 2.5 km).
+  function pollutionRadiusMeters(u) {
+    var peak = CO2_PARAMS.peakRadius;
+    var wMin = CO2_PARAMS.windRange.min;
+    var wMax = CO2_PARAMS.windRange.max;
+    var uc = Math.min(Math.max(u, wMin), wMax);
+    var t = (uc - wMin) / (wMax - wMin);
+    return (peak.high - (peak.high - peak.low) * t) * 1000;
   }
 
   function scheduleHeatmapRender() {
@@ -711,78 +573,160 @@
     state.co2Timer = setTimeout(renderHeatmap, 80);
   }
 
+  function co2Centroid() {
+    var sources = state.co2.sources;
+    if (!sources.length) return null;
+    var lat = 0, lng = 0;
+    sources.forEach(function (s) { lat += s.lat; lng += s.lng; });
+    return { lat: lat / sources.length, lng: lng / sources.length };
+  }
+
+  function co2MarkerIcon() {
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:26px;height:26px;border-radius:50%;' +
+        'background:radial-gradient(circle, #fff9c4 0%, #ffd54f 25%, #ff9c00 50%, #ff4d00 75%, rgba(255,61,0,.75) 100%);' +
+        'border:2px solid rgba(255,255,255,.9);box-shadow:0 0 12px rgba(255,80,0,.8)"></div>',
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+    });
+  }
+
   function updateCO2Info() {
     var co2 = state.co2;
-    if (co2.sourceLat == null) {
+    var sources = co2.sources;
+    if (!sources.length) {
       document.getElementById('co2-info').innerHTML = '';
+      document.getElementById('co2-source-status').textContent = 'Click map to place';
       return;
     }
     var u = co2.windSpeed;
-    var maxExtent = CO2_PARAMS.maxExtent;
-    var downwind = Math.min(maxExtent, maxExtent * (2.5 / Math.max(u, 0.5)));
-    var innerRadius = Math.round(downwind * 0.5);
+    var downwind = Math.round(pollutionRadiusMeters(u));
 
     // Update info panel
     var annualTonne = ((CO2_PARAMS.Q / 1000) * 31536000 / 1000).toFixed(0);
     document.getElementById('co2-info').innerHTML =
-      '<span style="color:#8ab4f8">\u25CB</span> ' + innerRadius + 'm &nbsp; <span style="color:#fbbc04">\u25CB</span> ' + downwind + 'm' +
+      '<span style="color:#9aa0a6">community</span> ~' + downwind + 'm' +
       ' &middot; <span style="color:#9aa0a6">Q</span> ' + (CO2_PARAMS.Q / 1000).toFixed(0) + ' kg/s' +
       ' &middot; <span style="color:#9aa0a6">u</span> ' + u.toFixed(1) + ' m/s' +
-      ' &middot; <span style="color:#9aa0a6">' + annualTonne + '</span> t/yr';
+      ' &middot; <span style="color:#9aa0a6">' + annualTonne + '</span> t/yr' +
+      ' &middot; <span style="color:#9aa0a6">' + sources.length + ' source' + (sources.length > 1 ? 's' : '') + '</span>';
 
-    // Update circles on map (always shown when source placed)
-    if (co2.circles) { state.map.removeLayer(co2.circles); co2.circles = null; }
-    if (co2.sourceLat != null) {
-      var circleGroup = L.layerGroup();
-      L.circle([co2.sourceLat, co2.sourceLng], { radius: innerRadius, color: '#8ab4f8', fill: false, weight: 1.5, dashArray: '6,4', opacity: 0.5 }).addTo(circleGroup);
-      L.circle([co2.sourceLat, co2.sourceLng], { radius: downwind, color: '#fbbc04', fill: false, weight: 1.5, dashArray: '6,4', opacity: 0.6 }).addTo(circleGroup);
-      co2.circles = circleGroup.addTo(state.map);
-    }
+    document.getElementById('co2-source-status').textContent = sources.length + ' source' + (sources.length > 1 ? 's' : '') + ' placed';
+
+    // Gray flare-direction arrow beside every pin (points where the flare blows toward)
+    var plumeDir = (co2.windDir + 180) % 360;
+    var rad = plumeDir * Math.PI / 180;
+    var off = 14;
+    sources.forEach(function (s) {
+      if (s.arrow) { state.map.removeLayer(s.arrow); }
+      s.arrow = L.marker([s.lat, s.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: '<div style="width:26px;height:26px;position:relative;transform:rotate(' + plumeDir + 'deg)">' +
+            '<div style="position:absolute;left:12px;top:1px;width:2px;height:18px;background:#9aa0a6;border-radius:1px;box-shadow:0 0 4px rgba(154,160,166,.9)"></div>' +
+            '<div style="position:absolute;left:6px;top:0;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:11px solid #9aa0a6;filter:drop-shadow(0 0 3px rgba(154,160,166,.9))"></div>' +
+            '</div>',
+          iconSize: [26, 26],
+          iconAnchor: [12 - off * Math.sin(rad), 12 + off * Math.cos(rad)],
+        }),
+        interactive: false,
+        zIndexOffset: 1000,
+      }).addTo(state.map);
+    });
   }
 
   function placeCO2Source(lat, lng) {
     var co2 = state.co2;
-    if (co2.sourceMarker) { state.map.removeLayer(co2.sourceMarker); }
-    co2.sourceLat = lat;
-    co2.sourceLng = lng;
-    co2.sourceMarker = L.marker([lat, lng], {
-      icon: L.divIcon({
-        className: '',
-        html: '<div style="width:20px;height:20px;background:#ff6d01;border:3px solid #fff;border-radius:50%;box-shadow:0 0 16px rgba(255,109,1,.7)"></div>',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
-      }),
-    }).addTo(state.map);
-    co2.sourceMarker.bindPopup('<b>Flare Source</b><br>' + lat.toFixed(4) + ', ' + lng.toFixed(4) + '<br>Q = 60,600 g/s');
-    document.getElementById('co2-source-status').textContent = lat.toFixed(4) + ', ' + lng.toFixed(4);
+    var id = co2.nextId++;
+    var marker = L.marker([lat, lng], { icon: co2MarkerIcon() }).addTo(state.map);
+    marker.bindPopup(
+      '<b>Flare Source #' + id + '</b><br>' + lat.toFixed(4) + ', ' + lng.toFixed(4) +
+      '<br>Q = 60,600 g/s' +
+      '<br><button class="co2-remove" data-id="' + id + '">Remove source</button>'
+    );
+    marker.on('popupopen', function (e) {
+      var btn = e.popup.getElement().querySelector('.co2-remove');
+      if (btn && !btn.dataset.bound) {
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', function () {
+          removeCO2Source(id);
+          state.map.closePopup();
+        });
+      }
+    });
+    co2.sources.push({ id: id, lat: lat, lng: lng, marker: marker, arrow: null });
     updateCO2Info();
     if (state.showHeatmap) scheduleHeatmapRender();
+    startLiveWeather();
     UI.toast('CO\u2082 source placed');
+  }
+
+  function removeCO2Source(id) {
+    var co2 = state.co2;
+    var idx = -1;
+    for (var i = 0; i < co2.sources.length; i++) {
+      if (co2.sources[i].id === id) { idx = i; break; }
+    }
+    if (idx === -1) return;
+    var s = co2.sources[idx];
+    if (s.marker) state.map.removeLayer(s.marker);
+    if (s.arrow) state.map.removeLayer(s.arrow);
+    co2.sources.splice(idx, 1);
+    updateCO2Info();
+    if (state.showHeatmap) scheduleHeatmapRender();
+    if (!co2.sources.length) stopLiveWeather();
+    UI.toast('Source removed');
+  }
+
+  function startLiveWeather() {
+    if (!C.weatherEnabled || state.co2.liveWeather) return;
+    state.co2.liveWeather = true;
+    var btn = document.getElementById('btn-co2-live');
+    if (btn) btn.classList.add('active');
+    fetchLiveWeather();
+    state.co2.liveTimer = setInterval(fetchLiveWeather, C.weatherInterval);
+  }
+
+  function stopLiveWeather() {
+    state.co2.liveWeather = false;
+    var btn = document.getElementById('btn-co2-live');
+    if (btn) btn.classList.remove('active');
+    if (state.co2.liveTimer) { clearInterval(state.co2.liveTimer); state.co2.liveTimer = null; }
+    var statusEl = document.getElementById('co2-live-status');
+    if (statusEl) statusEl.textContent = '';
   }
 
   function fetchLiveWeather() {
     var co2 = state.co2;
-    if (co2.sourceLat == null) return;
+    var c = co2Centroid();
+    if (!c) return;
     var statusEl = document.getElementById('co2-live-status');
     statusEl.textContent = 'fetching...';
-    fetch('/' + prefix + '/weather?lat=' + co2.sourceLat + '&lng=' + co2.sourceLng)
+    statusEl.style.color = '#fbbc04';
+    fetch('/' + prefix + '/weather?lat=' + c.lat + '&lng=' + c.lng, { signal: AbortSignal.timeout(15000) })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
       .then(function (data) {
-        if (data.wind_speed != null) {
-          co2.windSpeed = data.wind_speed;
-          document.getElementById('co2-wind-speed').value = data.wind_speed;
-          document.getElementById('co2-wind-speed-val').textContent = data.wind_speed.toFixed(1) + ' m/s';
-        }
+        var parts = [];
+        if (data.location) parts.push(data.location);
         if (data.wind_deg != null) {
           co2.windDir = data.wind_deg;
           document.getElementById('co2-wind-dir').value = data.wind_deg;
           document.getElementById('co2-wind-dir-val').textContent = data.wind_deg + '\u00b0';
+          parts.push(data.wind_deg + '\u00b0');
         }
-        var parts = [];
-        if (data.location) parts.push(data.location);
+        if (data.wind_speed != null) {
+          co2.windSpeed = data.wind_speed;
+          document.getElementById('co2-wind-speed').value = data.wind_speed;
+          document.getElementById('co2-wind-speed-val').textContent = data.wind_speed.toFixed(1) + ' m/s';
+          parts.push(data.wind_speed.toFixed(1) + ' m/s');
+        }
+        if (data.timestamp) {
+          parts.push(new Date(data.timestamp * 1000).toLocaleTimeString());
+        }
         parts.push('live');
         statusEl.textContent = parts.join(' \u00b7 ');
         statusEl.style.color = '#34a853';
@@ -815,58 +759,6 @@
         attribution: C.tileAttrib,
         maxZoom: 19,
       }).addTo(state.map);
-
-      // Aircraft layer (if enabled)
-      if (C.aircraftEnabled) {
-        state.acLayer = L.layerGroup().addTo(state.map);
-      }
-
-      // Inject aircraft UI if enabled
-      if (C.aircraftEnabled) {
-        var leftBar = document.querySelector('#top-bar .left');
-        var btnAir = document.createElement('button');
-        btnAir.className = 'btn active';
-        btnAir.id = 'btn-air';
-        btnAir.title = 'Aircraft layer';
-        btnAir.innerHTML = '<span class="icon">&#9992;</span> Air';
-        leftBar.appendChild(btnAir);
-
-        var statsPill = document.getElementById('stats-pill');
-        var acStat = document.createElement('div');
-        acStat.className = 'stat';
-        acStat.innerHTML = '<span class="num" id="s-air">0</span><span>&#9992;</span>';
-        var divd = document.createElement('div');
-        divd.className = 'divider';
-        var sDot = document.createElement('span');
-        sDot.className = 'status-dot offline pulse';
-        sDot.id = 's-dot';
-        var sTxt = document.createElement('span');
-        sTxt.id = 'stat-text';
-        sTxt.textContent = 'Connecting';
-        statsPill.appendChild(acStat);
-        statsPill.appendChild(divd);
-        statsPill.appendChild(sDot);
-        statsPill.appendChild(sTxt);
-
-        var legend = document.getElementById('legend');
-        var acLegend = document.createElement('div');
-        acLegend.className = 'section';
-        acLegend.innerHTML =
-          '<h4>&#9992; Aircraft</h4>' +
-          '<div class="legend-item"><span class="swatch" style="background:#34a853"></span>0 \u2013 10k ft</div>' +
-          '<div class="legend-item"><span class="swatch" style="background:#fbbc04"></span>10 \u2013 30k ft</div>' +
-          '<div class="legend-item"><span class="swatch" style="background:#ea4335"></span>30k+ ft</div>' +
-          '<div class="legend-item"><span class="swatch" style="background:rgba(255,255,255,.15)"></span>No alt</div>';
-        legend.insertBefore(acLegend, legend.firstChild);
-
-        // Aircraft button event
-        document.getElementById('btn-air').addEventListener('click', function () {
-          state.showAc = !state.showAc;
-          this.classList.toggle('active');
-          if (state.showAc) { state.map.addLayer(state.acLayer); }
-          else { state.map.removeLayer(state.acLayer); }
-        });
-      }
 
       // Inject CO2 button
       var rightBar = document.querySelector('#top-bar .right');
@@ -916,21 +808,15 @@
 
       if (C.weatherEnabled) {
         document.getElementById('btn-co2-live').addEventListener('click', function () {
-          state.co2.liveWeather = !state.co2.liveWeather;
-          this.classList.toggle('active');
-          if (state.co2.liveWeather) {
-            if (state.co2.sourceLat == null) {
+          if (!state.co2.liveWeather) {
+            if (!state.co2.sources.length) {
               UI.toast('Place a source first');
-              state.co2.liveWeather = false;
-              this.classList.remove('active');
               return;
             }
-            fetchLiveWeather();
-            state.co2.liveTimer = setInterval(fetchLiveWeather, 300000);
+            startLiveWeather();
             UI.toast('Live weather on');
           } else {
-            if (state.co2.liveTimer) { clearInterval(state.co2.liveTimer); state.co2.liveTimer = null; }
-            document.getElementById('co2-live-status').textContent = '';
+            stopLiveWeather();
             UI.toast('Live weather off');
           }
         });
@@ -949,7 +835,6 @@
         } else if (state.showHeatmap || document.getElementById('co2-panel').classList.contains('open')) {
           placeCO2Source(e.latlng.lat, e.latlng.lng);
         } else {
-          if (state.acSelected) { resetColors(); }
           UI.hideInfo();
         }
       });
@@ -991,7 +876,6 @@
 
       document.getElementById('info-close').addEventListener('click', function () {
         UI.hideInfo();
-        if (state.acSelected) { resetColors(); }
       });
 
       // Close search dropdown on outside click
@@ -1013,7 +897,6 @@
             return;
           }
           UI.hideInfo();
-          if (state.acSelected) { resetColors(); }
         }
         if (searchDropdown) {
           var items = searchDropdown.querySelectorAll('div');
@@ -1059,11 +942,6 @@
       // Start services
       loadPins();
       loadKml();
-
-      if (C.aircraftEnabled && state.acLayer) {
-        fetchAc();
-        state.acTimer = setInterval(fetchAc, C.acInterval);
-      }
 
     } catch (err) {
       document.body.innerHTML = '<div style="padding:40px;color:#fff;font-family:sans-serif">Error: ' + err.message + '<br><pre style="margin-top:10px;font-size:12px;color:#ea4335">' + err.stack + '</pre></div>';

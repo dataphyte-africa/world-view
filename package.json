@@ -1,7 +1,7 @@
 {
   "name": "world-view",
   "version": "1.0.0",
-  "description": "Interactive world map with pins, heatmaps, KML layers, and optional aircraft tracking via OpenSky Network",
+  "description": "Interactive world map with pins, heatmaps, and KML layers",
   "main": "server.js",
   "private": true,
   "scripts": {
@@ -9,12 +9,15 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
     "axios": "^1.7.0",
     "dotenv": "^16.4.0",
     "ejs": "^3.1.0",
     "express": "^4.19.0",
-    "express-rate-limit": "^7.2.0",
     "fast-xml-parser": "^4.5.7",
     "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "vercel": "^37.14.0"
   }
 }

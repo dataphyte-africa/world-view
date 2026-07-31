@@ -5,11 +5,10 @@ const path = require('path');
 const fs = require('fs');
 const { createRoutes } = require('./src/routes');
 const { KmlParser } = require('./src/services/KmlParser');
-const { PinService } = require('./src/services/PinService');
+const { createPinService } = require('./src/services/PinService');
 
-async function main() {
+async function createApp() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
   const prefix = process.env.WORLDVIEW_ROUTE_PREFIX || 'world-view';
 
   app.use(express.json());
@@ -18,8 +17,10 @@ async function main() {
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'resources/views'));
 
-  const dbPath = path.join(__dirname, 'data', 'worldview.db');
-  const pinService = new PinService(dbPath);
+  const dbPath = process.env.WORLDVIEW_DB_PATH
+    ? path.resolve(__dirname, process.env.WORLDVIEW_DB_PATH)
+    : path.join(__dirname, 'data', 'worldview.db');
+  const pinService = createPinService({ dbPath });
   await pinService.init();
 
   const kmlParser = new KmlParser();
@@ -47,15 +48,13 @@ async function main() {
   }
 
   const getConfig = () => ({
-    aircraftEnabled: process.env.WORLDVIEW_AIRCRAFT_ENABLED === 'true',
     pinsEnabled: true,
     kmlFeatures,
     kmlBounds,
     pins: [],
     routePrefix: prefix,
-    fetchInterval: parseInt(process.env.WORLDVIEW_AIRCRAFT_INTERVAL || '15000', 10),
-    maxAircraft: parseInt(process.env.WORLDVIEW_MAX_AIRCRAFT || '1000', 10),
     weatherEnabled: !!process.env.WORLDVIEW_OWM_KEY,
+    weatherInterval: parseInt(process.env.WORLDVIEW_WEATHER_INTERVAL || '60000', 10),
     assetUrl: '/assets',
   });
 
@@ -66,13 +65,22 @@ async function main() {
     res.render('index', { config: getConfig(), prefix });
   });
 
-  app.listen(PORT, () => {
-    console.log(`WorldView server running at http://localhost:${PORT}`);
-    console.log(`Map available at http://localhost:${PORT}/${prefix}`);
-  });
+  return app;
 }
 
-main().catch(err => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  createApp()
+    .then(app => {
+      const PORT = process.env.PORT || 3000;
+      app.listen(PORT, () => {
+        console.log(`WorldView server running at http://localhost:${PORT}`);
+        console.log(`Map available at http://localhost:${PORT}/${process.env.WORLDVIEW_ROUTE_PREFIX || 'world-view'}`);
+      });
+    })
+    .catch(err => {
+      console.error('Failed to start server:', err);
+      process.exit(1);
+    });
+}
+
+module.exports = { createApp };

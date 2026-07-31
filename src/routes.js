@@ -1,21 +1,8 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
 const axios = require('axios');
-const { OpenSkyService } = require('./services/OpenSkyService');
 
 function createRoutes(pinService, kmlParser, prefix) {
   const router = express.Router();
-  const openSky = new OpenSkyService();
-
-  const rateLimitMax = parseInt(process.env.WORLDVIEW_RATE_LIMIT || '30', 10);
-  const limiter = rateLimit({
-    windowMs: 60000,
-    max: rateLimitMax,
-    message: { error: 'Too many requests, please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req) => 'worldview:' + (req.ip || req.connection.remoteAddress),
-  });
 
   router.get('/', (req, res) => {
     res.redirect('/' + prefix);
@@ -26,25 +13,7 @@ function createRoutes(pinService, kmlParser, prefix) {
       status: 'ok',
       timestamp: Math.floor(Date.now() / 1000),
       version: '1.0.0',
-      aircraft_enabled: process.env.WORLDVIEW_AIRCRAFT_ENABLED === 'true',
     });
-  });
-
-  router.get('/opensky/*', limiter, async (req, res) => {
-    if (process.env.WORLDVIEW_AIRCRAFT_ENABLED !== 'true') {
-      return res.status(404).json({ error: 'Aircraft tracking is disabled' });
-    }
-
-    const path = req.params[0] || req.path.replace(/^\/opensky\//, '');
-    try {
-      const result = await openSky.proxy(path, req.query);
-      return res.status(result.status).json(result.data);
-    } catch (err) {
-      if (err.message === 'Invalid path') {
-        return res.status(400).json({ error: err.message });
-      }
-      return res.status(502).json({ error: err.message });
-    }
   });
 
   router.get('/weather', async (req, res) => {
