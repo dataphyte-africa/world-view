@@ -12,7 +12,7 @@ async function createApp() {
   const prefix = process.env.WORLDVIEW_ROUTE_PREFIX || 'world-view';
 
   app.use(express.json());
-  app.use('/assets', express.static(path.join(__dirname, 'resources/assets')));
+  app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
 
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'resources/views'));

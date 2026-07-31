@@ -1,0 +1,15 @@
+name = "world-view"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "public"
+migrations_dir = "migrations"
+
+[vars]
+WORLDVIEW_WEATHER_INTERVAL = "60000"
+
+# Production bindings are configured in the Cloudflare Pages dashboard.
+# This file drives `wrangler pages dev` locally. Replace the database_id
+# with the ID from `wrangler d1 create world-view` or your existing database.
+[[d1_databases]]
+binding = "DB"
+database_name = "world-view"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
