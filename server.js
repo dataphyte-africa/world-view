@@ -6,6 +6,8 @@ const fs = require('fs');
 const { createRoutes } = require('./src/routes');
 const { KmlParser } = require('./src/services/KmlParser');
 const { createPinService } = require('./src/services/PinService');
+const { createCo2Service } = require('./src/services/Co2Service');
+const { DEFAULT_CO2_SOURCES } = require('./src/co2-sources');
 
 async function createApp() {
   const app = express();
@@ -13,6 +15,7 @@ async function createApp() {
 
   app.use(express.json());
   app.use('/assets', express.static(path.join(__dirname, 'public/assets')));
+  app.use(express.static(path.join(__dirname, 'public')));
 
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'resources/views'));
@@ -22,6 +25,10 @@ async function createApp() {
     : path.join(__dirname, 'data', 'worldview.db');
   const pinService = createPinService({ dbPath });
   await pinService.init();
+
+  const co2Service = createCo2Service({ dbPath });
+  await co2Service.init();
+  await co2Service.ensureSeeded(DEFAULT_CO2_SOURCES);
 
   const kmlParser = new KmlParser();
 
@@ -58,7 +65,7 @@ async function createApp() {
     assetUrl: '/assets',
   });
 
-  const routes = createRoutes(pinService, kmlParser, prefix);
+  const routes = createRoutes(pinService, co2Service, kmlParser, prefix);
   app.use(`/${prefix}`, routes);
 
   app.get('/', (req, res) => {

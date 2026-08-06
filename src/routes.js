@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 
-function createRoutes(pinService, kmlParser, prefix) {
+function createRoutes(pinService, co2Service, kmlParser, prefix) {
   const router = express.Router();
 
   router.get('/', (req, res) => {
@@ -65,9 +65,9 @@ function createRoutes(pinService, kmlParser, prefix) {
     }
   });
 
-  router.get('/pins', (req, res) => {
+  router.get('/pins', async (req, res) => {
     try {
-      const pins = pinService.getAll();
+      const pins = await pinService.getAll();
       res.json(pins);
     } catch (err) {
       console.error('Failed to fetch pins:', err);
@@ -75,7 +75,7 @@ function createRoutes(pinService, kmlParser, prefix) {
     }
   });
 
-  router.post('/pins', (req, res) => {
+  router.post('/pins', async (req, res) => {
     const { name, lat, lng, imageUrl } = req.body || {};
 
     if (!name || typeof name !== 'string' || name.trim().length === 0 || name.length > 255) {
@@ -102,7 +102,7 @@ function createRoutes(pinService, kmlParser, prefix) {
     }
 
     try {
-      const pin = pinService.create({ name: name.trim(), lat, lng, imageUrl });
+      const pin = await pinService.create({ name: name.trim(), lat, lng, imageUrl });
       res.status(201).json(pin);
     } catch (err) {
       console.error('Failed to create pin:', err);
@@ -110,14 +110,14 @@ function createRoutes(pinService, kmlParser, prefix) {
     }
   });
 
-  router.delete('/pins/:id', (req, res) => {
+  router.delete('/pins/:id', async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id) || id <= 0 || String(id) !== req.params.id) {
       return res.status(400).json({ error: 'Invalid pin ID' });
     }
 
     try {
-      const deleted = pinService.delete(id);
+      const deleted = await pinService.delete(id);
       if (!deleted) {
         return res.status(404).json({ error: 'Pin not found' });
       }
@@ -125,6 +125,16 @@ function createRoutes(pinService, kmlParser, prefix) {
     } catch (err) {
       console.error('Failed to delete pin:', err);
       res.status(500).json({ error: 'Failed to delete pin' });
+    }
+  });
+
+  router.get('/co2', async (req, res) => {
+    try {
+      const sources = await co2Service.getAll();
+      res.json(sources);
+    } catch (err) {
+      console.error('Failed to fetch CO2 sources:', err);
+      res.status(500).json({ error: 'Failed to fetch CO2 sources' });
     }
   });
 

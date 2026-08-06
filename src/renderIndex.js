@@ -8,44 +8,49 @@ function renderIndex(config) {
 <title>WorldView</title>
 <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
 <link href="/assets/css/worldview.css" rel="stylesheet">
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  });
+}
+</script>
 </head>
 <body>
 <div id="map"></div>
 
 <div id="ui-overlay">
   <div id="top-bar">
-    <div class="left">
-      <div id="search-container">
-        <input type="text" id="search-input" placeholder="Search places or lat,lng..." spellcheck="false">
-        <button class="btn" id="btn-search" title="Search"><span class="icon">&#128269;</span></button>
-      </div>
-    </div>
     <div class="right">
-      <button class="btn" id="btn-pin" title="Pin mode — click on map to add a pin"><span class="icon">&#128204;</span> Pin</button>
       <button class="btn" id="btn-heatmap" title="Toggle heatmap layer"><span class="icon">&#128293;</span> Heat</button>
-      <button class="btn" id="btn-legend" title="Legend &amp; pins"><span class="icon">&#8801;</span></button>
     </div>
   </div>
 
-  <div id="legend">
+  <div id="legend" class="open">
     <div class="section" id="pin-section">
-      <h4 style="display:flex;justify-content:space-between;align-items:center">
-        <span>&#128204; Pins <span id="pin-count" style="font-weight:400;color:#9aa0a6;font-size:9px"></span></span>
-        <button id="btn-clear-pins" style="background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;font-size:9px;padding:0">Clear</button>
+      <h4 class="legend-header">
+        <span>&#128204; Pins <span id="pin-count" class="pin-count"></span></span>
+        <button id="btn-clear-pins" class="legend-clear">Clear</button>
       </h4>
       <div id="pin-list"></div>
+    </div>
+    <div class="section" id="co2-section">
+      <h4 class="legend-header">
+        <span>&#128293; CO&#8322; Flares <span id="co2-count" class="pin-count"></span></span>
+      </h4>
+      <div id="co2-list"></div>
     </div>
   </div>
 
   <div id="co2-panel">
     <div class="co2-header">
-      <span style="font-weight:600">CO&#8322; Dispersion</span>
-      <button id="co2-close" style="background:none;border:none;color:rgba(255,255,255,.25);cursor:pointer;font-size:18px;line-height:1;padding:0">&times;</button>
+      <span class="co2-title">CO&#8322; Dispersion</span>
+      <button id="co2-close" class="panel-close" title="Close">&times;</button>
     </div>
     <div class="co2-body">
       <div class="co2-field">
         <span class="co2-label">Source</span>
-        <span id="co2-source-status" style="color:#ff6d01;font-size:11px">Click map to place</span>
+        <span id="co2-source-status" class="co2-source-status">From database</span>
       </div>
       <div class="co2-field">
         <span class="co2-label">Wind Dir</span>
@@ -95,11 +100,37 @@ function renderIndex(config) {
 
 <div id="toast"></div>
 
+<div id="pin-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title">
+  <div class="modal-backdrop" data-pin-modal-dismiss></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <span id="pin-modal-title" class="modal-title">New Pin</span>
+      <button id="pin-modal-close" class="panel-close" title="Cancel">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <span class="modal-label">Coordinates</span>
+        <span id="pin-modal-coords" class="modal-coords">--</span>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label" for="pin-modal-name">Name</label>
+        <input id="pin-modal-name" class="modal-input" type="text" placeholder="Pin name" maxlength="255" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="modal-field">
+        <label class="modal-label" for="pin-modal-image">Image URL <span class="modal-optional">(optional)</span></label>
+        <input id="pin-modal-image" class="modal-input" type="text" placeholder="https://..." maxlength="2000" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="pin-modal-cancel" class="btn">Cancel</button>
+      <button id="pin-modal-save" class="btn modal-save">Save Pin</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-window.WORLDVIEW_CONFIG = ${safeConfig};
-</script>
-<script src="/assets/js/worldview.js"></script>
+<script type="application/json" id="worldview-config">${safeConfig}</script>
+<script type="module" src="/assets/js/worldview.js"></script>
 </body>
 </html>`;
 }

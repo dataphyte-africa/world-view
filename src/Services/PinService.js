@@ -1,5 +1,4 @@
-const fs = require('fs');
-const initSqlJs = require('sql.js');
+const { getConnection } = require('./sqlite-db');
 
 const TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS worldview_pins (
@@ -27,26 +26,21 @@ function mapRow(row) {
 class LocalSqliteAdapter {
   constructor(dbPath) {
     this.dbPath = dbPath;
-    this.db = null;
+    this.conn = null;
   }
 
   async init() {
-    const SQL = await initSqlJs();
-    if (fs.existsSync(this.dbPath)) {
-      this.db = new SQL.Database(fs.readFileSync(this.dbPath));
-    } else {
-      this.db = new SQL.Database();
-    }
-    this.db.run(TABLE_SQL);
-    this._save();
+    this.conn = await getConnection(this.dbPath);
+    this.conn.db.run(TABLE_SQL);
+    this.conn.save();
   }
 
   _save() {
-    fs.writeFileSync(this.dbPath, Buffer.from(this.db.export()));
+    this.conn.save();
   }
 
-  getAll() {
-    const stmt = this.db.prepare('SELECT * FROM worldview_pins ORDER BY created_at DESC');
+  async getAll() {
+    const stmt = this.conn.db.prepare('SELECT * FROM worldview_pins ORDER BY created_at DESC');
     const rows = [];
     while (stmt.step()) {
       rows.push(stmt.getAsObject());
@@ -55,14 +49,14 @@ class LocalSqliteAdapter {
     return rows.map(mapRow);
   }
 
-  create({ name, lat, lng, imageUrl }) {
-    this.db.run(
+  async create({ name, lat, lng, imageUrl }) {
+    this.conn.db.run(
       'INSERT INTO worldview_pins (name, latitude, longitude, image_url) VALUES (?, ?, ?, ?)',
       [name, lat, lng, imageUrl || null]
     );
-    const id = this.db.exec('SELECT last_insert_rowid() as id')[0].values[0][0];
+    const id = this.conn.db.exec('SELECT last_insert_rowid() as id')[0].values[0][0];
     this._save();
-    const stmt = this.db.prepare('SELECT * FROM worldview_pins WHERE id = ?');
+    const stmt = this.conn.db.prepare('SELECT * FROM worldview_pins WHERE id = ?');
     stmt.bind([id]);
     stmt.step();
     const row = stmt.getAsObject();
@@ -70,9 +64,9 @@ class LocalSqliteAdapter {
     return mapRow(row);
   }
 
-  delete(id) {
-    this.db.run('DELETE FROM worldview_pins WHERE id = ?', [id]);
-    const changed = this.db.getRowsModified();
+  async delete(id) {
+    this.conn.db.run('DELETE FROM worldview_pins WHERE id = ?', [id]);
+    const changed = this.conn.db.getRowsModified();
     this._save();
     return changed > 0;
   }
