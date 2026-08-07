@@ -1,6 +1,6 @@
 'use strict';
 
-var CACHE_NAME = 'worldview-v3';
+var CACHE_NAME = 'worldview-v4';
 
 var APP_SHELL = [
   '/',

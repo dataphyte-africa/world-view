@@ -89,6 +89,14 @@ if ('serviceWorker' in navigator) {
     <div class="grid" id="info-grid"></div>
   </div>
 
+  <div id="co2-detail-card" role="dialog" aria-modal="false" aria-labelledby="co2-detail-title">
+    <div class="co2-card-header">
+      <span id="co2-detail-title" class="co2-card-title">Flare Source</span>
+      <button id="co2-detail-close" class="panel-close" title="Close">&times;</button>
+    </div>
+    <div id="co2-detail-body" class="co2-card-body"></div>
+  </div>
+
   <div id="bottom-bar">
     <div class="item" id="b-coords"><span class="val">--</span></div>
     <div class="sep"></div>

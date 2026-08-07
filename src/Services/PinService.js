@@ -72,47 +72,6 @@ class LocalSqliteAdapter {
   }
 }
 
-class TursoAdapter {
-  constructor(url, authToken) {
-    const { createClient } = require('@libsql/client');
-    this.client = createClient({ url, authToken: authToken || undefined });
-  }
-
-  async init() {
-    await this.client.execute(TABLE_SQL);
-  }
-
-  async getAll() {
-    const rs = await this.client.execute('SELECT * FROM worldview_pins ORDER BY created_at DESC');
-    return rs.rows.map(mapRow);
-  }
-
-  async _getById(id) {
-    const rs = await this.client.execute({
-      sql: 'SELECT * FROM worldview_pins WHERE id = ?',
-      args: [id],
-    });
-    if (!rs.rows.length) return null;
-    return mapRow(rs.rows[0]);
-  }
-
-  async create({ name, lat, lng, imageUrl }) {
-    const rs = await this.client.execute({
-      sql: 'INSERT INTO worldview_pins (name, latitude, longitude, image_url) VALUES (?, ?, ?, ?)',
-      args: [name, lat, lng, imageUrl || null],
-    });
-    return this._getById(Number(rs.lastInsertRowid));
-  }
-
-  async delete(id) {
-    const rs = await this.client.execute({
-      sql: 'DELETE FROM worldview_pins WHERE id = ?',
-      args: [id],
-    });
-    return rs.rowsAffected > 0;
-  }
-}
-
 class PinService {
   constructor(adapter) {
     this.adapter = adapter;
@@ -136,9 +95,6 @@ class PinService {
 }
 
 function createPinService({ dbPath }) {
-  if (process.env.TURSO_DATABASE_URL) {
-    return new PinService(new TursoAdapter(process.env.TURSO_DATABASE_URL, process.env.TURSO_AUTH_TOKEN));
-  }
   return new PinService(new LocalSqliteAdapter(dbPath));
 }
 

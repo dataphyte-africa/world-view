@@ -53,40 +53,6 @@ class LocalSqliteAdapter {
   }
 }
 
-class TursoAdapter {
-  constructor(url, authToken) {
-    const { createClient } = require('@libsql/client');
-    this.client = createClient({ url, authToken: authToken || undefined });
-  }
-
-  async init() {
-    await this.client.execute(CO2_TABLE_SQL);
-  }
-
-  async getAll() {
-    const rs = await this.client.execute('SELECT * FROM worldview_co2_sources ORDER BY id');
-    return rs.rows.map(mapRow);
-  }
-
-  async count() {
-    const rs = await this.client.execute('SELECT COUNT(*) as n FROM worldview_co2_sources');
-    return Number(rs.rows[0].n);
-  }
-
-  async create({ lat, lng }) {
-    const rs = await this.client.execute({
-      sql: 'INSERT INTO worldview_co2_sources (latitude, longitude) VALUES (?, ?)',
-      args: [lat, lng],
-    });
-    const id = Number(rs.lastInsertRowid);
-    const rows = await this.client.execute({
-      sql: 'SELECT * FROM worldview_co2_sources WHERE id = ?',
-      args: [id],
-    });
-    return mapRow(rows.rows[0]);
-  }
-}
-
 class Co2Service {
   constructor(adapter) {
     this.adapter = adapter;
@@ -111,9 +77,6 @@ class Co2Service {
 }
 
 function createCo2Service({ dbPath }) {
-  if (process.env.TURSO_DATABASE_URL) {
-    return new Co2Service(new TursoAdapter(process.env.TURSO_DATABASE_URL, process.env.TURSO_AUTH_TOKEN));
-  }
   return new Co2Service(new LocalSqliteAdapter(dbPath));
 }
 

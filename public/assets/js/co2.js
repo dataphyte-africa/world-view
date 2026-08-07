@@ -71,12 +71,21 @@ export function updateCO2Info() {
 
 function addCO2Source(id, lat, lng) {
   var marker = L.marker([lat, lng], { icon: co2MarkerIcon() }).addTo(state.map);
-  marker.bindPopup(
-    '<b>Flare Source #' + id + '</b><br>' + lat.toFixed(4) + ', ' + lng.toFixed(4) +
-    '<br>Q = 60,600 g/s'
-  );
+  marker.on('click', function () { openCO2Detail(id, lat, lng); });
   state.co2.sources.push({ id: id, lat: lat, lng: lng, marker: marker, arrow: null });
 }
+
+export function openCO2Detail(id, lat, lng) {
+  document.getElementById('co2-detail-title').textContent = 'Flare Source #' + id;
+  document.getElementById('co2-detail-card').classList.add('open');
+}
+
+export function closeCO2Detail() {
+  var card = document.getElementById('co2-detail-card');
+  if (card) card.classList.remove('open');
+}
+
+document.getElementById('co2-detail-close').addEventListener('click', closeCO2Detail);
 
 export function flyToCO2(id) {
   var s = null;
@@ -86,7 +95,7 @@ export function flyToCO2(id) {
   if (!s || !state.map) return;
   var targetZoom = state.map.getZoom() + Math.log2(2);
   state.map.flyTo([s.lat, s.lng], targetZoom, { duration: 1.2 });
-  setTimeout(function () { if (s.marker) s.marker.openPopup(); }, 1250);
+  setTimeout(function () { openCO2Detail(s.id, s.lat, s.lng); }, 1250);
 }
 
 function renderCO2List() {
