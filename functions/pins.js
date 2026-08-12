@@ -1,7 +1,7 @@
-const { json } = require('../src/pages-lib');
-const { getAll, createPin } = require('../src/d1pins');
+import { json } from '../src/pages-lib.js';
+import { getAll, createPin } from '../src/d1pins.js';
 
-module.exports.onRequestGet = async function ({ env }) {
+export const onRequestGet = async function ({ env }) {
   try {
     const pins = await getAll(env);
     return json(200, pins);
@@ -10,7 +10,7 @@ module.exports.onRequestGet = async function ({ env }) {
   }
 };
 
-module.exports.onRequestPost = async function ({ request, env }) {
+export const onRequestPost = async function ({ request, env }) {
   let body;
   try {
     body = await request.json();

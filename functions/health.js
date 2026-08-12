@@ -1,9 +1,9 @@
-const { json } = require('../src/pages-lib');
+import { json } from '../src/pages-lib.js';
 
-module.exports.onRequestGet = function () {
+export function onRequestGet() {
   return json(200, {
     status: 'ok',
     timestamp: Math.floor(Date.now() / 1000),
     version: '1.0.0',
   });
-};
+}

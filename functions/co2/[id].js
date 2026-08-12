@@ -1,6 +1,5 @@
-import { json } from '../src/pages-lib.js';
-import { getAll, createCo2, ensureSeeded } from '../src/d1co2.js';
-import { DEFAULT_CO2_SOURCES } from '../src/co2-sources.js';
+import { json } from '../../src/pages-lib.js';
+import { updateCo2, deleteCo2 } from '../../src/d1co2.js';
 
 function parseOptionalText(value, max) {
   if (value == null || value === '') return '';
@@ -8,17 +7,12 @@ function parseOptionalText(value, max) {
   return value;
 }
 
-export const onRequestGet = async function ({ env }) {
-  try {
-    await ensureSeeded(env, DEFAULT_CO2_SOURCES);
-    const sources = await getAll(env);
-    return json(200, sources);
-  } catch (err) {
-    return json(500, { error: 'Failed to load CO2 sources' });
+export const onRequestPut = async function ({ request, params, env }) {
+  const id = parseInt(params.id, 10);
+  if (isNaN(id) || id <= 0) {
+    return json(400, { error: 'Invalid CO2 source ID' });
   }
-};
 
-export const onRequestPost = async function ({ request, env }) {
   let body;
   try {
     body = await request.json();
@@ -26,14 +20,7 @@ export const onRequestPost = async function ({ request, env }) {
     return json(400, { error: 'Invalid JSON body' });
   }
 
-  const { lat, lng, operator, location, description, imageUrl } = body || {};
-
-  if (lat == null || typeof lat !== 'number' || lat < -90 || lat > 90) {
-    return json(422, { error: 'lat must be a number between -90 and 90' });
-  }
-  if (lng == null || typeof lng !== 'number' || lng < -180 || lng > 180) {
-    return json(422, { error: 'lng must be a number between -180 and 180' });
-  }
+  const { operator, location, description, imageUrl } = body || {};
   const operatorText = parseOptionalText(operator, 255);
   const locationText = parseOptionalText(location, 255);
   const descriptionText = parseOptionalText(description, 4000);
@@ -53,15 +40,34 @@ export const onRequestPost = async function ({ request, env }) {
   }
 
   try {
-    const source = await createCo2(env, {
-      lat, lng,
+    const source = await updateCo2(env, id, {
       operator: operatorText,
       location: locationText,
       description: descriptionText,
       imageUrl: imageUrlText,
     });
-    return json(201, source);
+    if (!source) {
+      return json(404, { error: 'CO2 source not found' });
+    }
+    return json(200, source);
   } catch (err) {
-    return json(500, { error: 'Failed to create CO2 source' });
+    return json(500, { error: 'Failed to update CO2 source' });
+  }
+};
+
+export const onRequestDelete = async function ({ params, env }) {
+  const id = parseInt(params.id, 10);
+  if (isNaN(id) || id <= 0) {
+    return json(400, { error: 'Invalid CO2 source ID' });
+  }
+
+  try {
+    const deleted = await deleteCo2(env, id);
+    if (!deleted) {
+      return json(404, { error: 'CO2 source not found' });
+    }
+    return json(200, { message: 'CO2 source deleted' });
+  } catch (err) {
+    return json(500, { error: 'Failed to delete CO2 source' });
   }
 };

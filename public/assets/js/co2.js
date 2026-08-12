@@ -1,6 +1,6 @@
 'use strict';
 
-import { state, C, prefixPath } from './config.js';
+import { state, C, prefixPath, escapeHtml } from './config.js';
 import { UI } from './ui.js';
 import { CO2_PARAMS, pollutionRadiusMeters } from './co2-model.js';
 import { Smoke } from './smoke.js';
@@ -69,14 +69,51 @@ export function updateCO2Info() {
   });
 }
 
-function addCO2Source(id, lat, lng) {
+function addCO2Source(id, lat, lng, info) {
   var marker = L.marker([lat, lng], { icon: co2MarkerIcon() }).addTo(state.map);
   marker.on('click', function () { openCO2Detail(id, lat, lng); });
-  state.co2.sources.push({ id: id, lat: lat, lng: lng, marker: marker, arrow: null });
+  state.co2.sources.push({
+    id: id,
+    lat: lat,
+    lng: lng,
+    operator: (info && info.operator) || '',
+    location: (info && info.location) || '',
+    description: (info && info.description) || '',
+    imageUrl: (info && info.imageUrl) || '',
+    marker: marker,
+    arrow: null,
+  });
 }
 
 export function openCO2Detail(id, lat, lng) {
-  document.getElementById('co2-detail-title').textContent = 'Flare Source #' + id;
+  var s = null;
+  for (var i = 0; i < state.co2.sources.length; i++) {
+    if (state.co2.sources[i].id === id) { s = state.co2.sources[i]; break; }
+  }
+  var title = s && s.operator ? s.operator : ('Flare Source #' + id);
+  document.getElementById('co2-detail-title').textContent = title;
+
+  var body = document.getElementById('co2-detail-body');
+  if (!s) {
+    body.innerHTML = '<div class="co2-detail-row">No card information yet.</div>';
+  } else {
+    var rows = '';
+    if (s.imageUrl) {
+      rows += '<div class="co2-detail-img"><img src="' + escapeHtml(s.imageUrl) + '" alt="' + escapeHtml(title) + '" onerror="this.parentElement.innerHTML=\'<span style=display:block;padding:8px;font-size:11px;color:#9aa0a6>Image failed to load</span>\'"></div>';
+    }
+    if (s.location) {
+      rows += '<div class="co2-detail-row"><span class="co2-detail-label">Location</span><span>' + escapeHtml(s.location) + '</span></div>';
+    }
+    rows += '<div class="co2-detail-row"><span class="co2-detail-label">Coordinates</span><span class="co2-detail-mono">' + s.lat.toFixed(4) + ', ' + s.lng.toFixed(4) + '</span></div>';
+    if (s.description) {
+      rows += '<div class="co2-detail-row"><span class="co2-detail-label">Description</span><span class="co2-detail-desc">' + escapeHtml(s.description) + '</span></div>';
+    }
+    if (!s.imageUrl && !s.location && !s.description && !s.operator) {
+      rows = '<div class="co2-detail-row">No card information yet.</div>';
+    }
+    body.innerHTML = rows;
+  }
+
   document.getElementById('co2-detail-card').classList.add('open');
 }
 
@@ -109,9 +146,10 @@ function renderCO2List() {
     return;
   }
   list.innerHTML = sources.map(function (s) {
+    var name = s.operator || ('Source #' + s.id);
     return '<div class="co2-item" data-id="' + s.id + '" title="Go to flare source">' +
       '<span class="co2-dot"></span>' +
-      '<span class="co2-name">Source #' + s.id + '</span>' +
+      '<span class="co2-name">' + escapeHtml(name) + '</span>' +
       '<span class="co2-coords">' + s.lat.toFixed(4) + ', ' + s.lng.toFixed(4) + '</span>' +
       '</div>';
   }).join('');
@@ -124,7 +162,7 @@ export function loadCO2Sources() {
       if (!Array.isArray(list)) return;
       list.forEach(function (s) {
         if (s.lat == null || s.lng == null) return;
-        addCO2Source(s.id, s.lat, s.lng);
+        addCO2Source(s.id, s.lat, s.lng, s);
       });
       if (state.co2.sources.length) {
         state.co2.nextId = Math.max.apply(null, state.co2.sources.map(function (s) { return s.id; })) + 1;

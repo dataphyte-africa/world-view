@@ -1,7 +1,7 @@
-const { json } = require('../../src/pages-lib');
-const { deletePin } = require('../../src/d1pins');
+import { json } from '../../src/pages-lib.js';
+import { deletePin } from '../../src/d1pins.js';
 
-module.exports.onRequestDelete = async function ({ params, env }) {
+export const onRequestDelete = async function ({ params, env }) {
   const id = parseInt(params.id, 10);
   if (isNaN(id)) {
     return json(400, { error: 'Invalid pin ID' });

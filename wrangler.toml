@@ -7,9 +7,8 @@ migrations_dir = "migrations"
 WORLDVIEW_WEATHER_INTERVAL = "60000"
 
 # Production bindings are configured in the Cloudflare Pages dashboard.
-# This file drives `wrangler pages dev` locally. Replace the database_id
-# with the ID from `wrangler d1 create world-view` or your existing database.
+# This file drives `wrangler pages dev` locally.
 [[d1_databases]]
 binding = "DB"
 database_name = "world-view"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "059b2158-93a8-4f10-b44e-a3d18f7bece3"

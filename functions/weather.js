@@ -1,6 +1,6 @@
-const { json } = require('../src/pages-lib');
+import { json } from '../src/pages-lib.js';
 
-module.exports.onRequestGet = async function ({ request, env }) {
+export const onRequestGet = async function ({ request, env }) {
   const apiKey = env.WORLDVIEW_OWM_KEY;
   if (!apiKey) {
     return json(503, { error: 'OpenWeather API key not configured' });

@@ -23,6 +23,7 @@ if ('serviceWorker' in navigator) {
   <div id="top-bar">
     <div class="right">
       <button class="btn" id="btn-heatmap" title="Toggle heatmap layer"><span class="icon">&#128293;</span> Heat</button>
+      <a class="btn" id="btn-manage" href="/${config.routePrefix}/manage" title="Add or edit card information">&#128221; Manage</a>
     </div>
   </div>
 

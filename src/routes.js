@@ -1,5 +1,13 @@
 const express = require('express');
 const axios = require('axios');
+const { renderAdmin } = require('./renderAdmin');
+
+function parseOptionalText(value, max) {
+  if (value == null || value === '') return '';
+  if (typeof value !== 'string') return null;
+  if (value.length > max) return null;
+  return value;
+}
 
 function createRoutes(pinService, co2Service, kmlParser, prefix) {
   const router = express.Router();
@@ -136,6 +144,112 @@ function createRoutes(pinService, co2Service, kmlParser, prefix) {
       console.error('Failed to fetch CO2 sources:', err);
       res.status(500).json({ error: 'Failed to fetch CO2 sources' });
     }
+  });
+
+  router.post('/co2', async (req, res) => {
+    const { lat, lng, operator, location, description, imageUrl } = req.body || {};
+
+    if (typeof lat !== 'number' || Number.isNaN(lat) || lat < -90 || lat > 90) {
+      return res.status(422).json({ error: 'lat must be a number between -90 and 90' });
+    }
+    if (typeof lng !== 'number' || Number.isNaN(lng) || lng < -180 || lng > 180) {
+      return res.status(422).json({ error: 'lng must be a number between -180 and 180' });
+    }
+    const operatorText = parseOptionalText(operator, 255);
+    const locationText = parseOptionalText(location, 255);
+    const descriptionText = parseOptionalText(description, 4000);
+    const imageUrlText = parseOptionalText(imageUrl, 2000);
+    if (operatorText === null || locationText === null || descriptionText === null || imageUrlText === null) {
+      return res.status(422).json({ error: 'operator (255), location (255), description (4000) and imageUrl (2000) must be strings within limits' });
+    }
+    if (imageUrlText) {
+      try {
+        const parsed = new URL(imageUrlText);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          return res.status(422).json({ error: 'imageUrl must use http or https' });
+        }
+      } catch {
+        return res.status(422).json({ error: 'imageUrl must be a valid URL' });
+      }
+    }
+
+    try {
+      const source = await co2Service.create({
+        lat, lng,
+        operator: operatorText,
+        location: locationText,
+        description: descriptionText,
+        imageUrl: imageUrlText,
+      });
+      res.status(201).json(source);
+    } catch (err) {
+      console.error('Failed to create CO2 source:', err);
+      res.status(500).json({ error: 'Failed to create CO2 source' });
+    }
+  });
+
+  router.put('/co2/:id', async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id) || id <= 0 || String(id) !== req.params.id) {
+      return res.status(400).json({ error: 'Invalid CO2 source ID' });
+    }
+
+    const { operator, location, description, imageUrl } = req.body || {};
+    const operatorText = parseOptionalText(operator, 255);
+    const locationText = parseOptionalText(location, 255);
+    const descriptionText = parseOptionalText(description, 4000);
+    const imageUrlText = parseOptionalText(imageUrl, 2000);
+    if (operatorText === null || locationText === null || descriptionText === null || imageUrlText === null) {
+      return res.status(422).json({ error: 'operator (255), location (255), description (4000) and imageUrl (2000) must be strings within limits' });
+    }
+    if (imageUrlText) {
+      try {
+        const parsed = new URL(imageUrlText);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          return res.status(422).json({ error: 'imageUrl must use http or https' });
+        }
+      } catch {
+        return res.status(422).json({ error: 'imageUrl must be a valid URL' });
+      }
+    }
+
+    try {
+      const source = await co2Service.update(id, {
+        operator: operatorText,
+        location: locationText,
+        description: descriptionText,
+        imageUrl: imageUrlText,
+      });
+      if (!source) {
+        return res.status(404).json({ error: 'CO2 source not found' });
+      }
+      res.json(source);
+    } catch (err) {
+      console.error('Failed to update CO2 source:', err);
+      res.status(500).json({ error: 'Failed to update CO2 source' });
+    }
+  });
+
+  router.delete('/co2/:id', async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id) || id <= 0 || String(id) !== req.params.id) {
+      return res.status(400).json({ error: 'Invalid CO2 source ID' });
+    }
+
+    try {
+      const deleted = await co2Service.delete(id);
+      if (!deleted) {
+        return res.status(404).json({ error: 'CO2 source not found' });
+      }
+      res.json({ message: 'CO2 source deleted' });
+    } catch (err) {
+      console.error('Failed to delete CO2 source:', err);
+      res.status(500).json({ error: 'Failed to delete CO2 source' });
+    }
+  });
+
+  router.get('/manage', (req, res) => {
+    res.send(renderAdmin({ routePrefix: prefix }));
   });
 
   return router;
